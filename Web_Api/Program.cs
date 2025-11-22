@@ -1,12 +1,15 @@
+using System.Text;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using DataLayer.Entities;
 using DataLayer.Contexts;
 using DataLayer.Extensions;
 using BusinessLogic.Extensions;
+using Microsoft.IdentityModel.Tokens;
 using WebApi.Filters;
-using WebApi.Middleware;
 using WebApi.Extensions;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.OpenApi;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -51,36 +54,32 @@ builder.Services.AddCors(options =>
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(options =>
 {
-    options.SwaggerDoc("v1", new()
+    options.SwaggerDoc("v1", new OpenApiInfo
     {
         Version = "v1.0.0",
         Title = "ToDo API",
         Description = "ToDo API for ToDo application with full CRUD operations"
     });
 
-    // Додаємо підтримку авторизації в Swagger
-    options.AddSecurityDefinition("Bearer", new Microsoft.OpenApi.Models.OpenApiSecurityScheme
+    // Визначаємо схему безпеки
+    var securityScheme = new OpenApiSecurityScheme
     {
         Name = "Authorization",
-        Type = Microsoft.OpenApi.Models.SecuritySchemeType.Http,
+        Type = SecuritySchemeType.Http,
         Scheme = "Bearer",
         BearerFormat = "JWT",
-        In = Microsoft.OpenApi.Models.ParameterLocation.Header,
+        In = ParameterLocation.Header,
         Description = "JWT Authorization header using the Bearer scheme. Enter your token in the text input below."
-    });
+    };
 
-    options.AddSecurityRequirement(new Microsoft.OpenApi.Models.OpenApiSecurityRequirement
+    options.AddSecurityDefinition("Bearer", securityScheme);
+
+    // Налаштування вимог безпеки для .NET 10 / Swashbuckle v10
+    options.AddSecurityRequirement(document => new OpenApiSecurityRequirement
     {
         {
-            new Microsoft.OpenApi.Models.OpenApiSecurityScheme
-            {
-                Reference = new Microsoft.OpenApi.Models.OpenApiReference
-                {
-                    Type = Microsoft.OpenApi.Models.ReferenceType.SecurityScheme,
-                    Id = "Bearer"
-                }
-            },
-            Array.Empty<string>()
+            new OpenApiSecuritySchemeReference("Bearer", document),
+            new List<string>() // ВИПРАВЛЕНО: Використовуємо List<string> замість Array.Empty<string>()
         }
     });
 });
@@ -88,9 +87,41 @@ builder.Services.AddSwaggerGen(options =>
 // Налаштування Identity та авторизації
 builder.Services.AddAuthorization();
 
-builder.Services.AddIdentityApiEndpoints<AuthUser>()
-    .AddRoles<IdentityRole>()
-    .AddEntityFrameworkStores<DatabaseContext>();
+builder.Services.AddIdentity<AuthUser, IdentityRole>(options => 
+    {
+        // Налаштування пароля (для спрощення тестів)
+        options.Password.RequireDigit = false;
+        options.Password.RequireLowercase = false;
+        options.Password.RequireUppercase = false;
+        options.Password.RequireNonAlphanumeric = false;
+        options.Password.RequiredLength = 6;
+    })
+    .AddEntityFrameworkStores<DatabaseContext>()
+    .AddDefaultTokenProviders();
+
+// Налаштування Authentication та JWT
+builder.Services.AddAuthentication(options =>
+    {
+        options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
+        options.DefaultChallengeScheme = JwtBearerDefaults.AuthenticationScheme;
+        options.DefaultScheme = JwtBearerDefaults.AuthenticationScheme;
+    })
+    .AddJwtBearer(options =>
+    {
+        options.SaveToken = true;
+        options.RequireHttpsMetadata = false;
+        options.TokenValidationParameters = new TokenValidationParameters
+        {
+            ValidateIssuer = true,
+            ValidateAudience = true,
+            ValidateLifetime = true,
+            ValidateIssuerSigningKey = true,
+            ValidIssuer = builder.Configuration["Jwt:Issuer"],
+            ValidAudience = builder.Configuration["Jwt:Audience"],
+            IssuerSigningKey = new SymmetricSecurityKey(
+                Encoding.UTF8.GetBytes(builder.Configuration["Jwt:Key"]!))
+        };
+    });
 
 builder.Services.AddSingleton<IEmailSender<AuthUser>, DummyEmailSender>();
 
@@ -143,9 +174,6 @@ app.UseAuthorization();
 
 // Реєструємо Controllers
 app.MapControllers();
-
-// Реєструємо Identity API endpoints
-app.MapIdentityApi<AuthUser>();
 
 // Додаємо простий health check endpoint
 app.MapGet("/health", () => Results.Ok(new 
