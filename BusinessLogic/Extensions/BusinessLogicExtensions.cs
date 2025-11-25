@@ -10,6 +10,9 @@ public static class BusinessLogicExtensions
     {
         services.AddScoped<IItemService, ItemService>();
         services.AddScoped<ICategoryService, CategoryService>();
+        
+        // ДОДАНО: Реєстрація сервісу аутентифікації
+        services.AddScoped<IAuthService, AuthService>();
 
         return services;
     }

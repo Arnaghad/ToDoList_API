@@ -1,6 +1,6 @@
 using BusinessLogic.Interfaces;
 using Microsoft.AspNetCore.Mvc;
-using WebApi.DTOs; // Для ApiResponse
+using WebApi.DTOs;
 using WebApi.DTOs.Auth;
 
 namespace WebApi.Controllers;

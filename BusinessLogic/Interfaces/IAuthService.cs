@@ -1,5 +1,3 @@
-using DataLayer.Entities;
-
 namespace BusinessLogic.Interfaces;
 
 public interface IAuthService
